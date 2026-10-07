@@ -131,7 +131,7 @@ details{color:var(--muted);font-size:14px;line-height:1.5}summary{cursor:pointer
 <script>
 const RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K'],SUITS=['♥','♠','♦','♣'],ACE={'♥':4,'♠':3,'♦':2,'♣':1};
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
-let peer,isHost=false,conn=null,conns={},S=null,seen=new Set(),collected='',dealt='',lastTurn='',koSeen=new Set(),overShown='';
+let peer,isHost=false,conn=null,conns={},S=null,seen=new Set(),collected='',dealt='',lastTurn='',koSeen=new Set(),overShown='',nudge=null;
 const $=id=>document.getElementById(id),app=$('app');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
 
@@ -254,8 +254,9 @@ function info(){const d=document.createElement('div');d.className='veil';d.oncli
 
 function animate(v){
  const left=v.players.reduce((s,p)=>s+p.n,0),tk=v.hn+v.phase+v.turn+'-'+left;
- if(v.turn>=0&&tk!==lastTurn){lastTurn=tk;const me=v.turn===v.me,n=v.players[v.turn].name;
-  banner(me?(v.phase==='bid'?'Aposta!':'É a tua vez!'):(v.phase==='bid'?n+' a apostar':'Vez de '+n),me);if(me&&navigator.vibrate)navigator.vibrate(120)}
+ if(tk!==lastTurn){lastTurn=tk;clearInterval(nudge);if(v.turn>=0){const me=v.turn===v.me,n=v.players[v.turn].name;
+  banner(me?(v.phase==='bid'?'Aposta!':'É a tua vez!'):(v.phase==='bid'?n+' a apostar':'Vez de '+n),me);if(me&&navigator.vibrate)navigator.vibrate(120);
+  if(me)nudge=setInterval(()=>{banner('⏰ Despacha-te! É a tua vez',true);navigator.vibrate&&navigator.vibrate([300,100,300])},10000)}}
  v.players.forEach(p=>{if(p.lives>0)koSeen.delete(p.name)});
  const ko=v.players.filter(p=>p.lives<=0&&!koSeen.has(p.name));
  if(ko.length){ko.forEach(p=>koSeen.add(p.name));if(v.phase!=='over')banner('💀 '+ko.map(p=>p.name).join(', ')+(ko.length>1?' eliminados':' eliminado'))}
