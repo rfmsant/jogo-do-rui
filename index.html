@@ -38,6 +38,12 @@ button{font:inherit;cursor:pointer;border:0}
 details{color:var(--muted);font-size:14px;line-height:1.5}summary{cursor:pointer;color:var(--ink)}
 .code{font-size:44px;font-weight:800;letter-spacing:.18em;text-align:center;color:var(--brass)}
 .plist{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.emobtn{position:fixed;left:14px;bottom:calc(168px + env(safe-area-inset-bottom));width:46px;height:46px;border-radius:50%;background:oklch(0 0 0/.55);border:1px solid oklch(1 0 0/.2);font-size:24px;z-index:6}
+.emopanel{position:fixed;left:14px;bottom:calc(222px + env(safe-area-inset-bottom));display:flex;gap:6px;padding:8px;border-radius:18px;background:oklch(0.22 0.02 30);box-shadow:0 8px 24px oklch(0 0 0/.5);z-index:6;animation:rise .25s var(--ease) both}
+.emopanel button{width:48px;height:48px;border-radius:12px;background:oklch(1 0 0/.08);font-size:28px;transition:transform .15s var(--ease)}
+.emopanel button:active{transform:scale(.88)}
+.emo{position:fixed;z-index:12;font-size:42px;pointer-events:none;transform:translate(-50%,-50%);filter:drop-shadow(0 4px 8px oklch(0 0 0/.5));animation:emo 2.4s var(--ease) both}
+@keyframes emo{0%{transform:translate(-50%,-50%) scale(0) rotate(-20deg)}12%{transform:translate(-50%,-50%) scale(1.25) rotate(8deg)}22%{transform:translate(-50%,-50%) scale(1) rotate(0)}30%,45%{transform:translate(-50%,-50%) rotate(-6deg)}38%{transform:translate(-50%,-50%) rotate(6deg)}85%{opacity:1;transform:translate(-50%,-60%)}100%{opacity:0;transform:translate(-50%,-90%) scale(.8)}}
 .hello{text-align:center;color:var(--muted);font-size:16px;margin:-4px 0 4px}.hello b{color:var(--ink)}
 .link{background:none;color:var(--muted);text-decoration:underline;font-size:14px;padding:4px}
 .gbtn{background:var(--card);color:var(--cardink)}
@@ -171,6 +177,7 @@ function act(pid,m){
  if(m.t==='next'&&(pid==='host'||S.phase==='over')){
   if(S.phase==='handEnd'&&pid==='host'){if(S.size===5)S.dir=-1;else if(S.size===1)S.dir=1;S.size+=S.dir;deal()}
   else if(S.phase==='over')newGame();return}
+ if(m.t==='emo'){const k=S.players.findIndex(p=>p.id===pid),q=S.players[k];if(q&&EMO.includes(m.e)&&Date.now()-(q.et||0)>1200){q.et=Date.now();sendEmo(k,m.e)}return}
  const i=S.players.findIndex(p=>p.id===pid);if(i<0||S.turn!==i)return;const p=S.players[i];
  if(m.t==='bid'&&S.phase==='bid'){const v=+m.v;if(!(v>=0&&v<=S.size))return;p.bid=v;
   if(alive().every(q=>q.bid!==null)){S.phase='play';S.turn=S.leader}else S.turn=nextAlive(i);sync()}
@@ -204,6 +211,14 @@ function host(){if(!ME)return home();const name=ME.name;wake();
    else act(c.peer,m)});
   c.on('close',()=>{if(conns[c.peer]===c){delete conns[c.peer];sync()}})})}
 
+// ---------- Emojis ----------
+const EMO=['😂','😭','😡','😐'];let emoOpen=false,LV=null;
+function sendEmo(i,e){showEmo(i,e);Object.values(conns).forEach(c=>c.open&&c.send({t:'emo',p:i,e}))}
+function showEmo(i,e){const st=document.querySelector(`.seat[data-i="${i}"] .av`);if(!st)return;const r=st.getBoundingClientRect(),d=document.createElement('div');
+ d.className='emo';d.textContent=e;d.style.left=(r.left+r.width/2+(r.left>innerWidth/2?-44:44))+'px';d.style.top=(r.top+r.height/2)+'px';document.body.appendChild(d);setTimeout(()=>d.remove(),2400)}
+function emo(e){emoOpen=false;$('emop')&&$('emop').remove();send({t:'emo',e})}
+function toggleEmo(){emoOpen=!emoOpen;if(LV)render(LV)}
+
 // ---------- Bots ----------
 const BOTS=['Zé','Tó','Quim','Becas','Nando','Lili','Xana'];
 function botTick(){clearTimeout(botT);if(!S||!['bid','play'].includes(S.phase)||S.turn<0)return;const p=S.players[S.turn];if(!p||!p.bot)return;
@@ -230,7 +245,7 @@ function join(){if(!ME)return home();const name=ME.name,code=$('code').value.tri
  peer=new Peer();
  peer.on('open',()=>{conn=peer.connect('jogodorui-'+code,{reliable:true});
   conn.on('open',()=>conn.send({t:'join',name,uid:ME.uid}));
-  conn.on('data',m=>{if(m.t==='state')render(m.s);else if(m.t==='err')toast(m.m)});
+  conn.on('data',m=>{if(m.t==='emo')return showEmo(m.p,m.e);if(m.t==='state')render(m.s);else if(m.t==='err')toast(m.m)});
   conn.on('close',()=>toast('Ligação perdida. Recarrega e entra com o mesmo nome.'))});
  peer.on('error',e=>toast(e.type==='peer-unavailable'?'Sala não encontrada':'Erro: '+e.type))}
 function send(m){if(isHost)act('host',m);else conn.send(m)}
@@ -241,7 +256,7 @@ function face(c){if(c==='JK')return '<span class="r">JOKER</span><span class="s"
 function seatPos(i,v,rx,ry){const n=v.players.length,k=(i-v.me+n)%n,a=k*2*Math.PI/n;return[50-rx*Math.sin(a),50+ry*Math.cos(a)]}
 function rot(c){let h=0;for(const ch of c)h=(h*31+ch.charCodeAt(0))%997;return(h%17)-8}
 
-function render(v){
+function render(v){LV=v;
  const me=v.players[v.me];
  if(v.phase==='lobby'){
   app.innerHTML=`<div class="lobby"><h1 class="title">Jogo do <span>Rui</span></h1>
@@ -259,7 +274,7 @@ function render(v){
   const backs=i===v.me||dead?'':Array.from({length:p.n},(_,k)=>`<span class="cb" style="transform:rotate(${(k-(p.n-1)/2)*9}deg)"></span>`).join('');
   const lives=[0,1,2].map(k=>k<p.lives?'♥':'<i>♥</i>').join('');
   const bid=p.bid===null?(v.phase==='bid'?'?':'–'):p.tricks+'/'+p.bid;
-  h+=`<div class="seat${i===v.turn?' turn':''}${dead?' dead':''}${p.on?'':' off'}${v.phase==='over'&&!dead?' champ':''}${dead&&!koSeen.has(p.name)?' ko':''}" style="left:${x}%;top:${y}%">
+  h+=`<div class="seat${i===v.turn?' turn':''}${dead?' dead':''}${p.on?'':' off'}${v.phase==='over'&&!dead?' champ':''}${dead&&!koSeen.has(p.name)?' ko':''}" data-i="${i}" style="left:${x}%;top:${y}%">
    ${v.phase==='bid'&&p.bid!==null?`<div class="say">${p.bid===0?'Não faço':'Faço '+p.bid}</div>`:''}
    ${i===v.me?'':`<div class="backs">${backs}</div>`}
    <div class="av">${p.bot?'🤖':esc(p.name[0].toUpperCase())}${end&&p.lost?`<span class="drink">${dead?'💀':'🍺'}</span>`:''}${v.phase==='over'&&!dead?'<span class="crown">👑</span>':''}</div>
@@ -274,6 +289,7 @@ function render(v){
   h+='<div class="hand">'+me.hand.map((c,i)=>{const o=i-(n-1)/2,t=`rotate(${o*7}deg) translateY(${Math.abs(o)*5}px)`;
    return `<button class="hc${isRed(c)?' red':''}${c==='JK'?' jk':''}${live?' live':''}" style="--t:${t};transform:${t}" ${live?`onclick="send({t:'play',c:'${c}'})"`:'disabled'} aria-label="${c==='JK'?'Joker':c}">${face(c)}</button>`}).join('')+'</div>'}
  h+='</div>';
+ h+=`<button class="emobtn" onclick="toggleEmo()" aria-label="Emojis">😀</button>`+(emoOpen?`<div class="emopanel" id="emop">${EMO.map(e=>`<button onclick="emo('${e}')">${e}</button>`).join('')}</div>`:'');
  if(end){h+=`<div class="veil"><div class="sheet"><h2>${v.phase==='over'?'🏆 '+esc(v.msg):'Resultados'}</h2>`+
   v.players.map((p,i)=>`<div class="res"><span>${esc(p.name)} <span style="color:var(--muted)">${p.bid===null?'':p.tricks+'/'+p.bid}</span></span>${v.phase==='over'&&v.elo&&v.elo[i]?`<span class="ed ${v.elo[i].d>=0?'up':'dn'}">${v.elo[i].d>=0?'+':''}${v.elo[i].d} → ${v.elo[i].e}</span>`:''}<span class="x ${p.lost?'bad':'good'}">${p.lost?(p.lives<=0?'Eliminado 🍺':'−1 vida 🍺'):(p.lives>0?'✓':'')}</span></div>`).join('')+
   (isHost||v.phase==='over'?`<button class="btn" onclick="send({t:'next'})">${v.phase==='over'?'Jogar novamente':'Próxima ronda'}</button>`:'<p class="or">À espera do anfitrião…</p>')+'</div></div>'}
