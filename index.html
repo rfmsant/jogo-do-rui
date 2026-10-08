@@ -36,6 +36,7 @@ details{color:var(--muted);font-size:14px;line-height:1.5}summary{cursor:pointer
 .code{font-size:44px;font-weight:800;letter-spacing:.18em;text-align:center;color:var(--brass)}
 .plist{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
 .chip{padding:8px 14px;border-radius:99px;background:oklch(1 0 0/.08);font-weight:600}
+.chip .x{background:none;color:var(--muted);padding:0 0 0 4px;font-size:14px}
 
 /* Barra topo */
 .top{display:flex;justify-content:space-between;align-items:center;padding:10px 4px 4px;font-size:14px;color:var(--muted)}
@@ -131,7 +132,7 @@ details{color:var(--muted);font-size:14px;line-height:1.5}summary{cursor:pointer
 <script>
 const RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K'],SUITS=['♥','♠','♦','♣'],ACE={'♥':4,'♠':3,'♦':2,'♣':1};
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
-let peer,isHost=false,conn=null,conns={},S=null,seen=new Set(),collected='',dealt='',lastTurn='',koSeen=new Set(),overShown='',nudge=null;
+let peer,isHost=false,conn=null,conns={},S=null,seen=new Set(),collected='',dealt='',lastTurn='',koSeen=new Set(),overShown='',nudge=null,botT=null;
 const $=id=>document.getElementById(id),app=$('app');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
 
@@ -150,6 +151,8 @@ function deal(){const a=alive(),d=deck(a.length>5);
  S.phase='bid';S.turn=S.starter;S.leader=S.starter;S.trick=[];S.win=null;S.last=null;S.msg='';S.hn=(S.hn||0)+1;sync()}
 function act(pid,m){
  if(pid==='host'&&m.t==='start'&&S.phase==='lobby'&&S.players.length>1)return newGame();
+ if(pid==='host'&&m.t==='addBot'&&S.phase==='lobby'&&S.players.length<8){const used=S.players.map(p=>p.name),nm=BOTS.find(b=>!used.includes(b));S.players.push({id:'bot-'+Math.random().toString(36).slice(2,8),name:nm,lives:3,bot:true});return sync()}
+ if(pid==='host'&&m.t==='delBot'&&S.phase==='lobby'){S.players=S.players.filter(p=>p.id!==m.id);return sync()}
  if(m.t==='next'&&(pid==='host'||S.phase==='over')){
   if(S.phase==='handEnd'&&pid==='host'){if(S.size===5)S.dir=-1;else if(S.size===1)S.dir=1;S.size+=S.dir;deal()}
   else if(S.phase==='over')newGame();return}
@@ -168,8 +171,8 @@ function endHand(){alive().forEach(p=>{if(p.tricks!==p.bid){p.lives--;p.lost=tru
  if(a.length<=1){S.phase='over';S.msg=a.length?a[0].name+' ganhou!':'Todos eliminados — empate!'}
  else{S.phase='handEnd';S.starter=nextAlive(S.starter);S.msg='Fim da mão'}sync()}
 function view(i){return{phase:S.phase,size:S.size,turn:S.turn,msg:S.msg,trick:S.trick||[],win:S.win,last:S.last||null,hn:S.hn,me:i,code:S.code,
- players:S.players.map((p,k)=>({name:p.name,lives:p.lives,bid:p.bid,tricks:p.tricks,lost:p.lost,n:p.hand?p.hand.length:0,on:p.id==='host'||!!conns[p.id],hand:k===i?p.hand:null}))}}
-function sync(){S.players.forEach((p,i)=>{if(p.id==='host')render(view(i));else if(conns[p.id]&&conns[p.id].open)conns[p.id].send({t:'state',s:view(i)})})}
+ players:S.players.map((p,k)=>({name:p.name,lives:p.lives,bid:p.bid,tricks:p.tricks,lost:p.lost,n:p.hand?p.hand.length:0,on:p.id==='host'||p.bot||!!conns[p.id],bot:!!p.bot,id:p.bot?p.id:'',hand:k===i?p.hand:null}))}}
+function sync(){S.players.forEach((p,i)=>{if(p.id==='host')render(view(i));else if(conns[p.id]&&conns[p.id].open)conns[p.id].send({t:'state',s:view(i)})});botTick()}
 
 function wake(){try{navigator.wakeLock&&navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}}
 function nm(){return $('name').value.trim()}
@@ -186,6 +189,20 @@ function host(){const name=nm();if(!name)return toast('Escreve o teu nome');wake
     else c.send({t:'err',m:ex?'Nome já usado':'O jogo já começou ou está cheio'})}
    else act(c.peer,m)});
   c.on('close',()=>{if(conns[c.peer]===c){delete conns[c.peer];sync()}})})}
+
+// ---------- Bots ----------
+const BOTS=['Zé','Tó','Quim','Becas','Nando','Lili','Xana'];
+function botTick(){clearTimeout(botT);if(!S||!['bid','play'].includes(S.phase)||S.turn<0)return;const p=S.players[S.turn];if(!p||!p.bot)return;
+ const key=S.phase+S.turn+S.trick.length+p.hand.length;
+ botT=setTimeout(()=>{if(S.phase+S.turn+S.trick.length+p.hand.length!==key)return;
+  if(S.phase==='bid')act(p.id,{t:'bid',v:botBid(p)});else act(p.id,{t:'play',c:botPlay(p)})},900+Math.random()*900)}
+function botBid(p){const opp=alive().length-1,all=deck(alive().length>5),N=all.length;
+ let e=0;for(const c of p.hand){const lower=all.filter(x=>val(x)<val(c)).length;e+=Math.pow(lower/(N-1),opp)}
+ return Math.max(0,Math.min(S.size,Math.round(e)))}
+function botPlay(p){const h=[...p.hand].sort((a,b)=>val(a)-val(b)),need=p.bid-p.tricks;
+ const best=S.trick.length?Math.max(...S.trick.map(t=>val(t.c))):-1;
+ if(need>0){if(best<0)return h[h.length-1];const w=h.find(c=>val(c)>best);return w||h[0]}
+ const safe=h.filter(c=>val(c)<=best);return safe.length?safe[safe.length-1]:h[0]}
 
 // ---------- Cliente ----------
 function join(){const name=nm(),code=$('code').value.trim().toUpperCase();if(!name||!code)return toast('Nome e código');wake();
@@ -208,7 +225,8 @@ function render(v){
  if(v.phase==='lobby'){
   app.innerHTML=`<div class="lobby"><h1 class="title">Jogo do <span>Rui</span></h1>
    <div style="text-align:center;color:var(--muted)">Código da sala</div><div class="code">${v.code}</div>
-   <div class="plist">${v.players.map(p=>`<span class="chip">${esc(p.name)}</span>`).join('')}</div>
+   <div class="plist">${v.players.map(p=>`<span class="chip">${p.bot?'🤖 ':''}${esc(p.name)}${isHost&&p.bot?` <button class="x" onclick="send({t:'delBot',id:'${p.id}'})" aria-label="Remover">✕</button>`:''}</span>`).join('')}</div>
+   ${isHost&&v.players.length<8?`<button class="btn ghost" onclick="send({t:'addBot'})">+ Adicionar bot</button>`:''}
    ${isHost?`<button class="btn" ${v.players.length<2?'disabled':''} onclick="send({t:'start'})">${v.players.length<2?'À espera de jogadores…':'Começar jogo'}</button>`:'<p class="or">À espera do anfitrião…</p>'}</div>`;return}
  const my=v.turn===v.me,end=v.phase==='handEnd'||v.phase==='over';
  let msg=v.msg;if(!msg&&v.turn>=0)msg=my?(v.phase==='bid'?'A tua aposta':'A tua vez'):(v.phase==='bid'?v.players[v.turn].name+' a apostar…':'Vez de '+v.players[v.turn].name);
@@ -222,7 +240,7 @@ function render(v){
   h+=`<div class="seat${i===v.turn?' turn':''}${dead?' dead':''}${p.on?'':' off'}${v.phase==='over'&&!dead?' champ':''}${dead&&!koSeen.has(p.name)?' ko':''}" style="left:${x}%;top:${y}%">
    ${v.phase==='bid'&&p.bid!==null?`<div class="say">${p.bid===0?'Não faço':'Faço '+p.bid}</div>`:''}
    ${i===v.me?'':`<div class="backs">${backs}</div>`}
-   <div class="av">${esc(p.name[0].toUpperCase())}${end&&p.lost?`<span class="drink">${dead?'💀':'🍺'}</span>`:''}${v.phase==='over'&&!dead?'<span class="crown">👑</span>':''}</div>
+   <div class="av">${p.bot?'🤖':esc(p.name[0].toUpperCase())}${end&&p.lost?`<span class="drink">${dead?'💀':'🍺'}</span>`:''}${v.phase==='over'&&!dead?'<span class="crown">👑</span>':''}</div>
    <div class="nm">${i===v.me?'Tu':esc(p.name)}</div>
    <div class="meta"><span class="lives">${lives}</span><span class="bid${p.bid!==null&&p.tricks===p.bid?' ok':''}">${bid}</span></div></div>`});
  v.trick.forEach(t=>{const[x,y]=seatPos(t.p,v,17,17),[sx,sy]=seatPos(t.p,v,44,43);
