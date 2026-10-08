@@ -7,6 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
 :root{
  --bg:oklch(0.17 0.015 25);--ink:oklch(0.96 0.01 80);--muted:oklch(0.80 0.02 60);
@@ -35,6 +38,17 @@ button{font:inherit;cursor:pointer;border:0}
 details{color:var(--muted);font-size:14px;line-height:1.5}summary{cursor:pointer;color:var(--ink)}
 .code{font-size:44px;font-weight:800;letter-spacing:.18em;text-align:center;color:var(--brass)}
 .plist{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.hello{text-align:center;color:var(--muted);font-size:16px;margin:-4px 0 4px}.hello b{color:var(--ink)}
+.link{background:none;color:var(--muted);text-decoration:underline;font-size:14px;padding:4px}
+.gbtn{background:var(--card);color:var(--cardink)}
+.sel{padding:12px;border-radius:14px;background:oklch(1 0 0/.06);color:var(--ink);border:1px solid oklch(1 0 0/.2);font:inherit}
+.sel option{color:#111}
+.tag{font-size:12px;color:var(--muted);font-weight:400}
+.rated{text-align:center;font-size:14px;padding:8px;border-radius:12px;background:oklch(1 0 0/.06)}
+.lb{width:100%;border-collapse:collapse;font-size:15px}.lb td{padding:10px 6px;border-bottom:1px solid oklch(1 0 0/.08)}
+.lb td:first-child{width:36px;color:var(--muted);font-weight:800}.lb td:last-child{text-align:right;font-weight:800;color:var(--brass)}
+.lb tr.me td{background:oklch(0.84 0.12 85/.12)}.lb .sub{color:var(--muted);font-size:12px}
+.ed{font-size:13px;font-weight:800;margin-left:6px}.ed.up{color:var(--brass)}.ed.dn{color:oklch(0.75 0.15 30)}
 .chip{padding:8px 14px;border-radius:99px;background:oklch(1 0 0/.08);font-weight:600}
 .chip .x{background:none;color:var(--muted);padding:0 0 0 4px;font-size:14px}
 
@@ -145,14 +159,14 @@ function deck(big){const d=['JK'];for(const s of SUITS){for(const r of RANKS){if
 // ---------- Anfitrião (servidor) ----------
 const alive=()=>S.players.filter(p=>p.lives>0);
 function nextAlive(i){const n=S.players.length;for(let k=1;k<=n;k++){const j=(i+k)%n;if(S.players[j].lives>0)return j}return i}
-function newGame(){S.players.forEach(p=>p.lives=3);S.size=1;S.dir=1;S.starter=0;deal()}
+function newGame(){S.elo=null;S.players.forEach(p=>{p.lives=3;p.out=null});S.size=1;S.dir=1;S.starter=0;deal()}
 function deal(){const a=alive(),d=deck(a.length>5);
  S.players.forEach(p=>{p.bid=null;p.tricks=0;p.hand=[];p.lost=false});
  a.forEach(p=>p.hand=d.splice(0,S.size));
- S.phase='bid';S.turn=S.starter;S.leader=S.starter;S.trick=[];S.win=null;S.last=null;S.msg='';S.hn=(S.hn||0)+1;sync()}
+ S.played=[];S.phase='bid';S.turn=S.starter;S.leader=S.starter;S.trick=[];S.win=null;S.last=null;S.msg='';S.hn=(S.hn||0)+1;sync()}
 function act(pid,m){
  if(pid==='host'&&m.t==='start'&&S.phase==='lobby'&&S.players.length>1)return newGame();
- if(pid==='host'&&m.t==='addBot'&&S.phase==='lobby'&&S.players.length<8){const used=S.players.map(p=>p.name),nm=BOTS.find(b=>!used.includes(b));S.players.push({id:'bot-'+Math.random().toString(36).slice(2,8),name:nm,lives:3,bot:true});return sync()}
+ if(pid==='host'&&m.t==='addBot'&&S.phase==='lobby'&&S.players.length<8){const used=S.players.map(p=>p.name),nm=BOTS.find(b=>!used.includes(b));S.players.push({id:'bot-'+Math.random().toString(36).slice(2,8),name:nm,lives:3,bot:true,lvl:['easy','normal','hard'].includes(m.lvl)?m.lvl:'normal'});return sync()}
  if(pid==='host'&&m.t==='delBot'&&S.phase==='lobby'){S.players=S.players.filter(p=>p.id!==m.id);return sync()}
  if(m.t==='next'&&(pid==='host'||S.phase==='over')){
   if(S.phase==='handEnd'&&pid==='host'){if(S.size===5)S.dir=-1;else if(S.size===1)S.dir=1;S.size+=S.dir;deal()}
@@ -160,7 +174,7 @@ function act(pid,m){
  const i=S.players.findIndex(p=>p.id===pid);if(i<0||S.turn!==i)return;const p=S.players[i];
  if(m.t==='bid'&&S.phase==='bid'){const v=+m.v;if(!(v>=0&&v<=S.size))return;p.bid=v;
   if(alive().every(q=>q.bid!==null)){S.phase='play';S.turn=S.leader}else S.turn=nextAlive(i);sync()}
- else if(m.t==='play'&&S.phase==='play'){const k=p.hand.indexOf(m.c);if(k<0)return;p.hand.splice(k,1);S.trick.push({p:i,c:m.c});
+ else if(m.t==='play'&&S.phase==='play'){const k=p.hand.indexOf(m.c);if(k<0)return;p.hand.splice(k,1);S.played.push(m.c);S.trick.push({p:i,c:m.c});
   if(S.trick.length===alive().length)endTrick();else{S.turn=nextAlive(i);sync()}}
 }
 function endTrick(){const vs=S.trick.map(t=>val(t.c)),mx=Math.max(...vs),w=S.trick.filter((t,k)=>vs[k]===mx);let win=null;
@@ -168,25 +182,24 @@ function endTrick(){const vs=S.trick.map(t=>val(t.c)),mx=Math.max(...vs),w=S.tri
  S.phase='trickEnd';S.turn=-1;S.win=win;sync();
  setTimeout(()=>{if(win!==null)S.leader=win; // empate: começa quem começou a vaza empatada
   S.last={t:S.trick,w:win};S.trick=[];S.win=null;if(alive()[0].hand.length===0)endHand();else{S.phase='play';S.turn=S.leader;S.msg='';sync()}},2600)}
-function endHand(){alive().forEach(p=>{if(p.tricks!==p.bid){p.lives--;p.lost=true}});const a=alive();
- if(a.length<=1){S.phase='over';S.msg=a.length?a[0].name+' ganhou!':'Todos eliminados — empate!'}
+function endHand(){alive().forEach(p=>{if(p.tricks!==p.bid){p.lives--;p.lost=true;if(p.lives<=0)p.out=S.hn}});const a=alive();
+ if(a.length<=1){S.phase='over';S.msg=a.length?a[0].name+' ganhou!':'Todos eliminados — empate!';rate()}
  else{S.phase='handEnd';S.starter=nextAlive(S.starter);S.msg='Fim da mão'}sync()}
-function view(i){return{phase:S.phase,size:S.size,turn:S.turn,msg:S.msg,trick:S.trick||[],win:S.win,last:S.last||null,hn:S.hn,me:i,code:S.code,
- players:S.players.map((p,k)=>({name:p.name,lives:p.lives,bid:p.bid,tricks:p.tricks,lost:p.lost,n:p.hand?p.hand.length:0,on:p.id==='host'||p.bot||!!conns[p.id],bot:!!p.bot,id:p.bot?p.id:'',hand:k===i?p.hand:null}))}}
+function view(i){return{phase:S.phase,size:S.size,turn:S.turn,msg:S.msg,trick:S.trick||[],win:S.win,last:S.last||null,hn:S.hn,me:i,code:S.code,rated:isRated(),elo:S.elo||null,
+ players:S.players.map((p,k)=>({name:p.name,lives:p.lives,bid:p.bid,tricks:p.tricks,lost:p.lost,n:p.hand?p.hand.length:0,on:p.id==='host'||p.bot||!!conns[p.id],bot:!!p.bot,id:p.bot?p.id:'',lvl:p.lvl||'',hand:k===i?p.hand:null}))}}
 function sync(){S.players.forEach((p,i)=>{if(p.id==='host')render(view(i));else if(conns[p.id]&&conns[p.id].open)conns[p.id].send({t:'state',s:view(i)})});botTick()}
 
 function wake(){try{navigator.wakeLock&&navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}}
-function nm(){return $('name').value.trim()}
 function toast(t){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),3500)}
-function host(){const name=nm();if(!name)return toast('Escreve o teu nome');wake();
+function host(){if(!ME)return home();const name=ME.name;wake();
  const code=Math.random().toString(36).slice(2,6).toUpperCase();peer=new Peer('jogodorui-'+code);
- peer.on('open',()=>{isHost=true;S={code,phase:'lobby',players:[{id:'host',name,lives:3}],trick:[]};sync()});
+ peer.on('open',()=>{isHost=true;S={code,phase:'lobby',players:[{id:'host',name,lives:3,uid:ME.uid}],trick:[]};sync()});
  peer.on('error',e=>toast('Erro: '+e.type));
  peer.on('connection',c=>{
   c.on('data',m=>{
    if(m.t==='join'){const ex=S.players.find(p=>p.name.toLowerCase()===String(m.name).toLowerCase());
     if(ex&&ex.id!=='host'){delete conns[ex.id];ex.id=c.peer;conns[c.peer]=c;sync()}
-    else if(!ex&&S.phase==='lobby'&&S.players.length<8){S.players.push({id:c.peer,name:String(m.name).slice(0,14),lives:3});conns[c.peer]=c;sync()}
+    else if(!ex&&S.phase==='lobby'&&S.players.length<8){S.players.push({id:c.peer,name:String(m.name).slice(0,14),lives:3,uid:String(m.uid||'')});conns[c.peer]=c;sync()}
     else c.send({t:'err',m:ex?'Nome já usado':'O jogo já começou ou está cheio'})}
    else act(c.peer,m)});
   c.on('close',()=>{if(conns[c.peer]===c){delete conns[c.peer];sync()}})})}
@@ -197,19 +210,26 @@ function botTick(){clearTimeout(botT);if(!S||!['bid','play'].includes(S.phase)||
  const key=S.phase+S.turn+S.trick.length+p.hand.length;
  botT=setTimeout(()=>{if(S.phase+S.turn+S.trick.length+p.hand.length!==key)return;
   if(S.phase==='bid')act(p.id,{t:'bid',v:botBid(p)});else act(p.id,{t:'play',c:botPlay(p)})},900+Math.random()*900)}
-function botBid(p){const opp=alive().length-1,all=deck(alive().length>5),N=all.length;
- let e=0;for(const c of p.hand){const lower=all.filter(x=>val(x)<val(c)).length;e+=Math.pow(lower/(N-1),opp)}
+const LVL={easy:'Fácil',normal:'Normal',hard:'Difícil'};
+function pWin(c,pool,k){if(!k)return 1;return Math.pow(pool.filter(x=>val(x)<val(c)).length/Math.max(1,pool.length),k)}
+function unknown(p){return deck(alive().length>5).filter(c=>!p.hand.includes(c)&&!S.played.includes(c))}
+function botBid(p){const opp=alive().length-1,pool=p.lvl==='hard'?unknown(p):deck(alive().length>5);
+ let e=p.hand.reduce((s,c)=>s+pWin(c,pool,opp),0);if(p.lvl==='easy')e+=Math.random()*2-1;
  return Math.max(0,Math.min(S.size,Math.round(e)))}
 function botPlay(p){const h=[...p.hand].sort((a,b)=>val(a)-val(b)),need=p.bid-p.tricks;
- const best=S.trick.length?Math.max(...S.trick.map(t=>val(t.c))):-1;
+ if(p.lvl==='easy'&&Math.random()<.5)return h[Math.floor(Math.random()*h.length)];
+ const best=S.trick.length?Math.max(...S.trick.map(t=>val(t.c))):-1,safe=h.filter(c=>val(c)<=best);
+ if(p.lvl==='hard'){const left=alive().length-S.trick.length-1,pool=unknown(p),win=h.filter(c=>val(c)>best);
+  if(need>0){if(!win.length)return h[0];if(left===0)return win[0];if(need>=h.length)return win[win.length-1];return win.find(c=>pWin(c,pool,left)>=.5)||h[0]}
+  return safe.length?safe[safe.length-1]:h[0]}
  if(need>0){if(best<0)return h[h.length-1];const w=h.find(c=>val(c)>best);return w||h[0]}
- const safe=h.filter(c=>val(c)<=best);return safe.length?safe[safe.length-1]:h[0]}
+ return safe.length?safe[safe.length-1]:h[0]}
 
 // ---------- Cliente ----------
-function join(){const name=nm(),code=$('code').value.trim().toUpperCase();if(!name||!code)return toast('Nome e código');wake();
+function join(){if(!ME)return home();const name=ME.name,code=$('code').value.trim().toUpperCase();if(!code)return toast('Escreve o código');wake();
  peer=new Peer();
  peer.on('open',()=>{conn=peer.connect('jogodorui-'+code,{reliable:true});
-  conn.on('open',()=>conn.send({t:'join',name}));
+  conn.on('open',()=>conn.send({t:'join',name,uid:ME.uid}));
   conn.on('data',m=>{if(m.t==='state')render(m.s);else if(m.t==='err')toast(m.m)});
   conn.on('close',()=>toast('Ligação perdida. Recarrega e entra com o mesmo nome.'))});
  peer.on('error',e=>toast(e.type==='peer-unavailable'?'Sala não encontrada':'Erro: '+e.type))}
@@ -226,8 +246,9 @@ function render(v){
  if(v.phase==='lobby'){
   app.innerHTML=`<div class="lobby"><h1 class="title">Jogo do <span>Rui</span></h1>
    <div style="text-align:center;color:var(--muted)">Código da sala</div><div class="code">${v.code}</div>
-   <div class="plist">${v.players.map(p=>`<span class="chip">${p.bot?'🤖 ':''}${esc(p.name)}${isHost&&p.bot?` <button class="x" onclick="send({t:'delBot',id:'${p.id}'})" aria-label="Remover">✕</button>`:''}</span>`).join('')}</div>
-   ${isHost&&v.players.length<8?`<button class="btn ghost" onclick="send({t:'addBot'})">+ Adicionar bot</button>`:''}
+   <div class="plist">${v.players.map(p=>`<span class="chip">${p.bot?'🤖 ':''}${esc(p.name)}${p.bot?` <span class="tag">${LVL[p.lvl]}</span>`:''}${isHost&&p.bot?` <button class="x" onclick="send({t:'delBot',id:'${p.id}'})" aria-label="Remover">✕</button>`:''}</span>`).join('')}</div>
+   ${isHost&&v.players.length<8?`<div class="join"><select class="sel" onchange="botLvl=this.value">${Object.entries(LVL).map(([k,t])=>`<option value="${k}"${k===botLvl?' selected':''}>${t}</option>`).join('')}</select><button class="btn ghost" style="flex:1" onclick="send({t:'addBot',lvl:botLvl})">+ Adicionar bot</button></div>`:''}
+   <div class="rated">${v.rated?'🏆 Conta para o ranking':'Jogo amigável — não conta para o ranking'}</div>
    ${isHost?`<button class="btn" ${v.players.length<2?'disabled':''} onclick="send({t:'start'})">${v.players.length<2?'À espera de jogadores…':'Começar jogo'}</button>`:'<p class="or">À espera do anfitrião…</p>'}</div>`;return}
  const my=v.turn===v.me,end=v.phase==='handEnd'||v.phase==='over';
  let msg=v.msg;if(!msg&&v.turn>=0)msg=my?(v.phase==='bid'?'Quantas fazes?':'A tua vez'):(v.phase==='bid'?v.players[v.turn].name+' a falar…':'Vez de '+v.players[v.turn].name);
@@ -254,7 +275,7 @@ function render(v){
    return `<button class="hc${isRed(c)?' red':''}${c==='JK'?' jk':''}${live?' live':''}" style="--t:${t};transform:${t}" ${live?`onclick="send({t:'play',c:'${c}'})"`:'disabled'} aria-label="${c==='JK'?'Joker':c}">${face(c)}</button>`}).join('')+'</div>'}
  h+='</div>';
  if(end){h+=`<div class="veil"><div class="sheet"><h2>${v.phase==='over'?'🏆 '+esc(v.msg):'Resultados'}</h2>`+
-  v.players.map(p=>`<div class="res"><span>${esc(p.name)} <span style="color:var(--muted)">${p.bid===null?'':p.tricks+'/'+p.bid}</span></span><span class="x ${p.lost?'bad':'good'}">${p.lost?(p.lives<=0?'Eliminado 🍺':'−1 vida 🍺'):(p.lives>0?'✓':'')}</span></div>`).join('')+
+  v.players.map((p,i)=>`<div class="res"><span>${esc(p.name)} <span style="color:var(--muted)">${p.bid===null?'':p.tricks+'/'+p.bid}</span></span>${v.phase==='over'&&v.elo&&v.elo[i]?`<span class="ed ${v.elo[i].d>=0?'up':'dn'}">${v.elo[i].d>=0?'+':''}${v.elo[i].d} → ${v.elo[i].e}</span>`:''}<span class="x ${p.lost?'bad':'good'}">${p.lost?(p.lives<=0?'Eliminado 🍺':'−1 vida 🍺'):(p.lives>0?'✓':'')}</span></div>`).join('')+
   (isHost||v.phase==='over'?`<button class="btn" onclick="send({t:'next'})">${v.phase==='over'?'Jogar novamente':'Próxima ronda'}</button>`:'<p class="or">À espera do anfitrião…</p>')+'</div></div>'}
  app.innerHTML=h;animate(v)}
 
@@ -281,6 +302,7 @@ function animate(v){
  if(ko.length){ko.forEach(p=>koSeen.add(p.name));if(v.phase!=='over')banner('💀 '+ko.map(p=>p.name).join(', ')+(ko.length>1?' eliminados':' eliminado'))}
  const tot=v.players.reduce((s,p)=>s+(p.bid||0),0);
  if(v.phase==='play'&&tot>v.size&&warned!==v.hn){warned=v.hn;setTimeout(()=>banner(`Alguém se vai f*der 😬 ${tot} de ${v.size} jogada${v.size>1?'s':''}`,false,'warn'),1800)}
+ if(v.elo&&v.elo[v.me]&&ME)ME.elo=v.elo[v.me].e;
  if(v.phase==='over'&&overShown!==v.hn){overShown=v.hn;confetti()}
  if(!v.trick.length){seen.clear();collected=''}
  if(RM)return;
@@ -299,13 +321,66 @@ function animate(v){
    {duration:500,delay:i*90,easing:E,fill:'backwards'}))}
 }
 
-function home(){app.innerHTML=`<div class="lobby"><h1 class="title">Jogo do <span>Rui</span></h1>
+function home(){const T='<div class="lobby"><h1 class="title">Jogo do <span>Rui</span></h1>';
+ if(!ME){app.innerHTML=T+`<button class="btn gbtn" onclick="gLogin()">Entrar com Google</button>
+ <div class="or">ou com nome e PIN</div>
  <input id="name" class="field" placeholder="O teu nome" maxlength="14" autocomplete="nickname">
+ <input id="pin" class="field" placeholder="PIN (4 a 6 números)" maxlength="6" inputmode="numeric" type="password">
+ <button class="btn ghost" onclick="pinLogin()">Entrar</button>
+ <button class="link" onclick="board()">Ver ranking</button></div>`;return}
+ app.innerHTML=T+`<div class="hello">Olá, <b>${esc(ME.name)}</b> · <b>${ME.elo}</b> pontos</div>
  <button class="btn" onclick="host()">Criar sala</button>
  <div class="or">ou entra numa sala</div>
  <div class="join"><input id="code" class="field" placeholder="CÓDIGO" maxlength="4"><button class="btn ghost" onclick="join()">Entrar</button></div>
- <details><summary>Regras</summary><p>Sem 8, 9 e 10 (entram com mais de 5 jogadores) + 1 joker. Joker &gt; Ás (♥ &gt; ♠ &gt; ♦ &gt; ♣) &gt; K &gt; Q &gt; J &gt; 7 … 2. Cartas iguais empatam e ninguém ganha a vaza. Mãos de 1 → 5 → 1 cartas. Falhar a aposta = −1 vida (e bebe). 3 vidas.</p></details></div>`}
-home();
+ <details><summary>Regras</summary><p>Sem 8, 9 e 10 (entram com mais de 5 jogadores) + 1 joker. Joker &gt; Ás (♥ &gt; ♠ &gt; ♦ &gt; ♣) &gt; K &gt; Q &gt; J &gt; 7 … 2. Cartas iguais empatam e ninguém ganha a vaza. Mãos de 1 → 5 → 1 cartas. Falhar a aposta = −1 vida (e bebe). 3 vidas.</p></details>
+ <div class="row" style="display:flex;justify-content:center;gap:16px"><button class="link" onclick="board()">🏆 Ranking</button><button class="link" onclick="auth.signOut()">Sair</button></div></div>`}
+
+// ---------- Login e ranking (Firebase) ----------
+firebase.initializeApp({apiKey:"AIzaSyAIQVp-2kfIxa0hEN_aZAx4rstLWhf2a9E",authDomain:"jogo-do-rui.firebaseapp.com",projectId:"jogo-do-rui",storageBucket:"jogo-do-rui.firebasestorage.app",messagingSenderId:"269122085538",appId:"1:269122085538:web:a2b5524e3a0883a3f5adfb"});
+const auth=firebase.auth(),db=firebase.firestore(),FV=firebase.firestore.FieldValue;
+let ME=null,pendingName=null,botLvl='normal';
+const TBL={2:[20,-20],3:[20,0,-15],4:[25,8,0,-15],5:[30,15,5,0,-15],6:[30,18,8,3,0,-15],7:[35,22,12,5,2,0,-15],8:[35,25,15,8,4,2,0,-15]};
+const okName=n=>n.length>=2&&n.length<=14;
+auth.onAuthStateChanged(async u=>{if(peer)return;
+ if(!u){ME=null;return home()}
+ try{const d=await db.collection('users').doc(u.uid).get();
+  if(d.exists){ME={uid:u.uid,...d.data()};home()}else if(pendingName)await makeProfile(u.uid,pendingName);else nickScreen(u)}
+ catch(e){toast('Erro: '+e.message)}});
+async function makeProfile(uid,name){const nref=db.collection('names').doc(name.toLowerCase());
+ await db.runTransaction(async t=>{const n=await t.get(nref);if(n.exists&&n.data().uid!==uid)throw new Error('Esse nome já existe');
+  if(!n.exists)t.set(nref,{uid});t.set(db.collection('users').doc(uid),{name,elo:100,games:0,wins:0})});
+ pendingName=null;ME={uid,name,elo:100,games:0,wins:0};home()}
+function nickScreen(u){app.innerHTML=`<div class="lobby"><h1 class="title">Jogo do <span>Rui</span></h1><div class="hello">Escolhe o nome que os outros vão ver</div>
+ <input id="nick" class="field" maxlength="14" value="${esc((u.displayName||'').split(' ')[0])}"><button class="btn" onclick="saveNick()">Continuar</button><button class="link" onclick="auth.signOut()">Cancelar</button></div>`}
+function saveNick(){const n=$('nick').value.trim();if(!okName(n))return toast('Nome com 2 a 14 letras');makeProfile(auth.currentUser.uid,n).catch(e=>toast(e.message))}
+function gLogin(){const pr=new firebase.auth.GoogleAuthProvider();
+ auth.signInWithPopup(pr).catch(e=>{if(['auth/popup-blocked','auth/operation-not-supported-in-this-environment'].includes(e.code))auth.signInWithRedirect(pr);else if(e.code!=='auth/popup-closed-by-user'&&e.code!=='auth/cancelled-popup-request')toast('Erro: '+e.message)})}
+async function pinLogin(){const name=$('name').value.trim(),pin=$('pin').value.trim();
+ if(!okName(name))return toast('Nome com 2 a 14 letras');if(!/^\d{4,6}$/.test(pin))return toast('PIN com 4 a 6 números');
+ const slug=name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'-'),email=slug+'@jogodorui.app',pass='jdr-'+pin;
+ try{await auth.signInWithEmailAndPassword(email,pass)}catch(e){
+  try{const n=await db.collection('names').doc(name.toLowerCase()).get();if(n.exists)return toast('PIN errado (ou esse nome já é de outra pessoa)')}catch(_){}
+  pendingName=name;try{await auth.createUserWithEmailAndPassword(email,pass)}catch(e2){pendingName=null;toast(e2.code==='auth/email-already-in-use'?'PIN errado':'Erro: '+e2.message)}}}
+async function board(){app.innerHTML='<div class="lobby"><div class="or">A carregar ranking…</div></div>';
+ try{const q=await db.collection('users').orderBy('elo','desc').limit(50).get();
+  app.innerHTML=`<div class="lobby" style="max-width:460px"><h1 class="title" style="font-size:2.4rem">Ranking</h1><table class="lb">${q.docs.map((d,i)=>{const u=d.data();
+   return `<tr class="${ME&&d.id===ME.uid?'me':''}"><td>${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td><td>${esc(u.name)}<div class="sub">${u.games} jogos · ${u.wins} vitórias</div></td><td>${u.elo}</td></tr>`}).join('')||'<tr><td></td><td>Ainda ninguém jogou</td><td></td></tr>'}</table>
+   <button class="btn ghost" onclick="home()">Voltar</button></div>`}
+ catch(e){toast('Erro: '+e.message);home()}}
+function isRated(){const P=S.players;return P.length>=2&&P.every(p=>p.uid&&!p.bot)&&new Set(P.map(p=>p.uid)).size===P.length}
+async function rate(){if(!isRated())return;const P=S.players,N=P.length,W=TBL[N],o=p=>p.lives>0?1e9:p.out;
+ const order=[...P].sort((a,b)=>o(b)-o(a)),base=new Map();
+ for(let i=0;i<N;){let j=i;while(j<N&&o(order[j])===o(order[i]))j++;const avg=W.slice(i,j).reduce((s,x)=>s+x,0)/(j-i);
+  for(let k=i;k<j;k++)base.set(order[k],{b:avg,first:i===0});i=j}
+ try{const docs=await Promise.all(P.map(p=>db.collection('users').doc(p.uid).get())),R=docs.map(d=>d.data().elo);
+  const batch=db.batch(),res=[];
+  P.forEach((p,i)=>{const A=(R.reduce((s,x)=>s+x,0)-R[i])/(N-1),E=1/(1+Math.pow(10,(A-R[i])/200)),{b,first}=base.get(p);
+   const f=Math.min(1.5,Math.max(.5,b>=0?2*(1-E):2*E)),e=Math.max(0,R[i]+Math.round(b*f));res.push({d:e-R[i],e});
+   batch.update(db.collection('users').doc(p.uid),{elo:e,games:FV.increment(1),wins:FV.increment(first?1:0)})});
+  batch.set(db.collection('games').doc(),{at:FV.serverTimestamp(),players:P.map((p,i)=>({uid:p.uid,name:p.name,d:res[i].d,elo:res[i].e}))});
+  await batch.commit();S.elo=res;const me=P.findIndex(p=>p.id==='host');if(me>=0)ME.elo=res[me].e;sync()}
+ catch(e){toast('Ranking não gravado: '+e.message)}}
+app.innerHTML='<div class="lobby"><div class="or">A carregar…</div></div>';
 </script>
 </body>
 </html>
