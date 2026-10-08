@@ -1,0 +1,16 @@
+{
+  "name": "Jogo do Rui",
+  "short_name": "Jogo do Rui",
+  "description": "Jogo de cartas de apostas para jogar com amigos",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2b1714",
+  "theme_color": "#2b1714",
+  "lang": "pt-PT",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}
