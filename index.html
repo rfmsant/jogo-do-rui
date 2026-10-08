@@ -108,7 +108,8 @@ details{color:var(--muted);font-size:14px;line-height:1.5}summary{cursor:pointer
 .mc{position:relative;width:26px;height:36px;border-radius:4px;background:var(--card);color:var(--cardink);font-weight:800;font-size:11px;display:grid;place-items:center;line-height:1}
 .mc.red{color:var(--red)}.mc.jk{background:var(--cardink);color:var(--brass)}.mc.w{box-shadow:0 0 0 2px var(--brass)}
 .mc small{position:absolute;bottom:-14px;font-size:9px;color:var(--muted);font-weight:600;white-space:nowrap}
-.rank{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 14px}.rank .mc{width:30px;height:42px;font-size:12px}
+.rank{display:flex;flex-direction:column;align-items:center;gap:6px;margin:10px 0 14px}.rank div{display:flex;align-items:center;gap:3px}.rank .mc{width:24px;height:34px;font-size:11px}.rank b{color:var(--muted);font-size:13px}
+.banner.warn{background:var(--red);color:var(--ink);font-size:20px;white-space:normal;text-align:center;max-width:90vw}
 .sheet p{color:var(--muted);line-height:1.5;margin:6px 0}
 .banner{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);z-index:15;pointer-events:none;padding:16px 28px;border-radius:18px;background:oklch(0 0 0/.8);font-weight:800;font-size:22px;white-space:nowrap;animation:ban 1.7s var(--ease) both}
 .banner.me{background:var(--brass);color:oklch(0.2 0.03 60);font-size:30px;box-shadow:0 0 60px oklch(0.84 0.12 85/.6)}
@@ -132,7 +133,7 @@ details{color:var(--muted);font-size:14px;line-height:1.5}summary{cursor:pointer
 <script>
 const RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K'],SUITS=['♥','♠','♦','♣'],ACE={'♥':4,'♠':3,'♦':2,'♣':1};
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
-let peer,isHost=false,conn=null,conns={},S=null,seen=new Set(),collected='',dealt='',lastTurn='',koSeen=new Set(),overShown='',nudge=null,botT=null;
+let peer,isHost=false,conn=null,conns={},S=null,seen=new Set(),collected='',dealt='',lastTurn='',koSeen=new Set(),overShown='',nudge=null,botT=null,warned='';
 const $=id=>document.getElementById(id),app=$('app');
 const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
 
@@ -229,8 +230,8 @@ function render(v){
    ${isHost&&v.players.length<8?`<button class="btn ghost" onclick="send({t:'addBot'})">+ Adicionar bot</button>`:''}
    ${isHost?`<button class="btn" ${v.players.length<2?'disabled':''} onclick="send({t:'start'})">${v.players.length<2?'À espera de jogadores…':'Começar jogo'}</button>`:'<p class="or">À espera do anfitrião…</p>'}</div>`;return}
  const my=v.turn===v.me,end=v.phase==='handEnd'||v.phase==='over';
- let msg=v.msg;if(!msg&&v.turn>=0)msg=my?(v.phase==='bid'?'A tua aposta':'A tua vez'):(v.phase==='bid'?v.players[v.turn].name+' a apostar…':'Vez de '+v.players[v.turn].name);
- let h=`<div class="top"><span>Sala <b>${v.code}</b><button class="ibtn" onclick="info()" aria-label="Regras">i</button></span><span>Mão de <b>${v.size}</b> · Apostas <b>${v.players.reduce((s,p)=>s+(p.bid||0),0)}</b></span></div>
+ let msg=v.msg;if(!msg&&v.turn>=0)msg=my?(v.phase==='bid'?'Quantas fazes?':'A tua vez'):(v.phase==='bid'?v.players[v.turn].name+' a falar…':'Vez de '+v.players[v.turn].name);
+ let h=`<div class="top"><span>Sala <b>${v.code}</b><button class="ibtn" onclick="info()" aria-label="Regras">i</button></span><span>Ronda de <b>${v.size}</b> carta${v.size>1?'s':''} · Apostas <b>${v.players.reduce((s,p)=>s+(p.bid||0),0)}</b></span></div>
  <div class="last">${lastHTML(v)}</div>
  <div id="tbl"><div class="felt"></div>${end?'':`<div class="pill${my?' hot':''}">${esc(msg)}</div>`}`;
  v.players.forEach((p,i)=>{const[x,y]=seatPos(i,v,44,43),dead=p.lives<=0;
@@ -252,19 +253,19 @@ function render(v){
   h+='<div class="hand">'+me.hand.map((c,i)=>{const o=i-(n-1)/2,t=`rotate(${o*7}deg) translateY(${Math.abs(o)*5}px)`;
    return `<button class="hc${isRed(c)?' red':''}${c==='JK'?' jk':''}${live?' live':''}" style="--t:${t};transform:${t}" ${live?`onclick="send({t:'play',c:'${c}'})"`:'disabled'} aria-label="${c==='JK'?'Joker':c}">${face(c)}</button>`}).join('')+'</div>'}
  h+='</div>';
- if(end){h+=`<div class="veil"><div class="sheet"><h2>${v.phase==='over'?'🏆 '+esc(v.msg):'Fim da mão'}</h2>`+
+ if(end){h+=`<div class="veil"><div class="sheet"><h2>${v.phase==='over'?'🏆 '+esc(v.msg):'Resultados'}</h2>`+
   v.players.map(p=>`<div class="res"><span>${esc(p.name)} <span style="color:var(--muted)">${p.bid===null?'':p.tricks+'/'+p.bid}</span></span><span class="x ${p.lost?'bad':'good'}">${p.lost?(p.lives<=0?'Eliminado 🍺':'−1 vida 🍺'):(p.lives>0?'✓':'')}</span></div>`).join('')+
-  (isHost||v.phase==='over'?`<button class="btn" onclick="send({t:'next'})">${v.phase==='over'?'Jogar novamente':'Próxima mão'}</button>`:'<p class="or">À espera do anfitrião…</p>')+'</div></div>'}
+  (isHost||v.phase==='over'?`<button class="btn" onclick="send({t:'next'})">${v.phase==='over'?'Jogar novamente':'Próxima ronda'}</button>`:'<p class="or">À espera do anfitrião…</p>')+'</div></div>'}
  app.innerHTML=h;animate(v)}
 
-function banner(t,me){document.querySelectorAll('.banner').forEach(x=>x.remove());const b=document.createElement('div');b.className='banner'+(me?' me':'');b.textContent=t;document.body.appendChild(b);setTimeout(()=>b.remove(),1700)}
+function banner(t,me,cls){document.querySelectorAll('.banner').forEach(x=>x.remove());const b=document.createElement('div');b.className='banner'+(me?' me':'')+(cls?' '+cls:'');b.textContent=t;document.body.appendChild(b);setTimeout(()=>b.remove(),1700)}
 function confetti(){if(RM)return;const C=['oklch(0.84 0.12 85)','oklch(0.52 0.19 25)','oklch(0.98 0.005 90)','oklch(0.6 0.12 255)'];
  for(let i=0;i<90;i++){const d=document.createElement('div');d.className='cf';d.style.cssText=`left:${Math.random()*100}vw;background:${C[i%4]};animation-duration:${2+Math.random()*2}s;animation-delay:${Math.random()*.8}s`;document.body.appendChild(d);setTimeout(()=>d.remove(),5000)}}
 const mini=(c,cls='',sub='')=>`<span class="mc${isRed(c)?' red':''}${c==='JK'?' jk':''}${cls}">${c==='JK'?'★':c}${sub}</span>`;
-function lastHTML(v){const L=v.last;if(!L)return '';return '<span>Última vaza</span>'+L.t.map(t=>mini(t.c,t.p===L.w?' w':'',`<small>${esc(v.players[t.p].name.slice(0,6))}</small>`)).join('')}
+function lastHTML(v){const L=v.last;if(!L)return '';return '<span>Última jogada</span>'+L.t.map(t=>mini(t.c,t.p===L.w?' w':'',`<small>${esc(v.players[t.p].name.slice(0,6))}</small>`)).join('')}
 function info(){const d=document.createElement('div');d.className='veil';d.onclick=e=>{if(e.target===d)d.remove()};
  d.innerHTML=`<div class="sheet"><h2>Regras</h2><p>Ordem das cartas, da maior para a menor:</p>
- <div class="rank">${['JK','A♥','A♠','A♦','A♣','K','Q','J','7','6','5','4','3','2'].map(c=>mini(c)).join('')}</div>
+ <div class="rank"><div>${['JK','A♥','A♠','A♦','A♣'].map(c=>mini(c)).join('<b>&gt;</b>')}</div><b>&gt;</b><div>${['K','Q','J','7','6','5','4','3','2'].map(c=>mini(c)).join('<b>&gt;</b>')}</div></div>
  <p>Os ases nunca empatam: ♥ copas &gt; ♠ espadas &gt; ♦ ouros &gt; ♣ paus. Nas outras cartas o naipe não conta: cartas iguais empatam e ninguém ganha a vaza.</p>
  <p>Antes de jogar, cada um diz quantas vazas vai fazer. O objetivo não é ganhar, é acertar. Falhar = −1 vida (e bebe 🍺). Sem vidas, estás fora.</p>
  <p>Mãos de 1 → 5 → 1 cartas. Com mais de 5 jogadores entram os 8, 9 e 10 (acima do 7).</p>
@@ -273,11 +274,13 @@ function info(){const d=document.createElement('div');d.className='veil';d.oncli
 function animate(v){
  const left=v.players.reduce((s,p)=>s+p.n,0),tk=v.hn+v.phase+v.turn+'-'+left;
  if(tk!==lastTurn){lastTurn=tk;clearInterval(nudge);if(v.turn>=0){const me=v.turn===v.me,n=v.players[v.turn].name;
-  banner(me?(v.phase==='bid'?'Aposta!':'É a tua vez!'):(v.phase==='bid'?n+' a apostar':'Vez de '+n),me);if(me&&navigator.vibrate)navigator.vibrate(120);
-  if(me)nudge=setInterval(()=>{banner('⏰ Despacha-te! É a tua vez',true);navigator.vibrate&&navigator.vibrate([300,100,300])},10000)}}
+  banner(me?(v.phase==='bid'?'Quantas fazes?':'É a tua vez!'):(v.phase==='bid'?n+' a falar':'Vez de '+n),me);if(me&&navigator.vibrate)navigator.vibrate(120);
+  if(me)nudge=setInterval(()=>{banner('⏰ Anda lá, é a tua vez!',true);navigator.vibrate&&navigator.vibrate([300,100,300])},10000)}}
  v.players.forEach(p=>{if(p.lives>0)koSeen.delete(p.name)});
  const ko=v.players.filter(p=>p.lives<=0&&!koSeen.has(p.name));
  if(ko.length){ko.forEach(p=>koSeen.add(p.name));if(v.phase!=='over')banner('💀 '+ko.map(p=>p.name).join(', ')+(ko.length>1?' eliminados':' eliminado'))}
+ const tot=v.players.reduce((s,p)=>s+(p.bid||0),0);
+ if(v.phase==='play'&&tot>v.size&&warned!==v.hn){warned=v.hn;setTimeout(()=>banner(`Alguém se vai f*der 😬 ${tot} de ${v.size} jogada${v.size>1?'s':''}`,false,'warn'),1800)}
  if(v.phase==='over'&&overShown!==v.hn){overShown=v.hn;confetti()}
  if(!v.trick.length){seen.clear();collected=''}
  if(RM)return;
