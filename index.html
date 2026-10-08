@@ -69,6 +69,7 @@ details{color:var(--muted);font-size:14px;line-height:1.5}summary{cursor:pointer
 .ach{display:flex;gap:10px;align-items:center;background:oklch(1 0 0/.06);border-radius:14px;padding:10px;font-size:13px;line-height:1.3}
 .ach i{font-style:normal;font-size:26px}.ach small{display:block;color:var(--muted);font-size:11px}
 .ach.off{opacity:.35;filter:grayscale(1)}
+.ach.leg{grid-column:1/-1;border:1.5px solid var(--brass);background:oklch(0.84 0.12 85/.1)}.ach.leg:not(.off){box-shadow:0 0 24px oklch(0.84 0.12 85/.35)}.ach.leg small::after{content:' · Lendária';color:var(--brass);font-weight:700}
 .chart{width:100%;height:auto;background:oklch(1 0 0/.04);border-radius:14px}
 .h2{font-size:15px;color:var(--muted);margin:6px 0 -4px;font-weight:600}
 .hrow{display:flex;align-items:center;gap:6px;padding:10px 0 18px;border-bottom:1px solid oklch(1 0 0/.08);flex-wrap:wrap}
@@ -197,7 +198,7 @@ function deck(big){const d=['JK'];for(const s of SUITS){for(const r of RANKS){if
 // ---------- Anfitrião (servidor) ----------
 const alive=()=>S.players.filter(p=>p.lives>0);
 function nextAlive(i){const n=S.players.length;for(let k=1;k<=n;k++){const j=(i+k)%n;if(S.players[j].lives>0)return j}return i}
-const newGs=()=>({bids:0,hits:0,bh:[0,0,0,0,0,0],run:0,best:0,lost:0,zero:0,kami:0});
+const newGs=()=>({bids:0,hits:0,bh:[0,0,0,0,0,0],run:0,best:0,lost:0,zero:0,kami:0,nz:0,tw:0,allin:0});
 function newGame(){S.elo=null;S.ach=null;S.done=false;S.players.forEach(p=>{p.lives=3;p.out=null;p.gs=newGs()});S.size=1;S.dir=1;S.starter=0;deal()}
 function deal(){const a=alive(),d=deck(a.length>5);
  S.players.forEach(p=>{p.bid=null;p.tricks=0;p.hand=[];p.lost=false});
@@ -224,7 +225,7 @@ function endTrick(){const vs=S.trick.map(t=>val(t.c)),mx=Math.max(...vs),w=S.tri
   finishTrick(win)},2600)}
 function finishTrick(win){if(S.phase!=='trickEnd')return;if(win!==null)S.leader=win;
  S.last={t:S.trick,w:win};(S.hist=S.hist||[]).push(S.last);S.trick=[];S.win=null;if(alive()[0].hand.length===0)endHand();else{S.phase='play';S.turn=S.leader;S.msg='';sync()}}
-function endHand(){alive().forEach(p=>{const g=p.gs||(p.gs=newGs()),hit=p.tricks===p.bid;g.bids++;g.bh[p.bid]++;
+function endHand(){alive().forEach(p=>{const g=p.gs||(p.gs=newGs()),hit=p.tricks===p.bid;g.bids++;g.bh[p.bid]++;g.tw+=p.tricks;if(p.bid!==0)g.nz=1;if(S.size===5&&p.bid===5&&p.tricks===5)g.allin=1;
   if(hit){g.hits++;g.run++;g.best=Math.max(g.best,g.run);if(p.bid===0)g.zero++}
   else{g.run=0;g.lost++;if(p.bid===S.size&&S.size>=3)g.kami=1;p.lives--;p.lost=true;if(p.lives<=0)p.out=S.hn}});const a=alive();
  if(a.length<=1){S.phase='over';S.msg=a.length?a[0].name+' ganhou!':'Todos eliminados — empate!';finishGame()}
@@ -387,7 +388,7 @@ function animate(v){
  const sk=v.hn+v.phase+v.trick.length;if(sk!==sndK){sndK=sk;const me=v.players[v.me];
   if(v.phase==='trickEnd')v.win==null?SFX.tie():SFX.win(v.win===v.me);
   if(v.phase==='handEnd'&&me.lost)SFX.lose();if(v.phase==='over')SFX.fanfare()}
- if(v.ach&&v.ach.length&&achShown!==v.hn+''){achShown=v.hn+'';v.ach.forEach((a,k)=>setTimeout(()=>{SFX.win(true);banner(ACH[a][0]+' Conquista: '+ACH[a][1],true)},2500+k*2000))}
+ if(v.ach&&v.ach.length&&achShown!==v.hn+''){achShown=v.hn+'';v.ach.forEach((a,k)=>setTimeout(()=>{SFX.win(true);if(a==='ghost'){SFX.fanfare();confetti()}banner(ACH[a][0]+(a==='ghost'?' LENDÁRIA: ':' Conquista: ')+ACH[a][1],true)},2500+k*2000))}
  if(tk!==lastTurn){lastTurn=tk;clearInterval(nudge);if(v.turn>=0){const me=v.turn===v.me,n=v.players[v.turn].name;
   if(me)SFX.turn();banner(me?(v.phase==='bid'?'Quantas fazes?':'É a tua vez!'):(v.phase==='bid'?n+' a falar':'Vez de '+n),me);if(me&&navigator.vibrate)navigator.vibrate(120);
   if(me)nudge=setInterval(()=>{banner('⏰ Anda lá, é a tua vez!',true);navigator.vibrate&&navigator.vibrate([300,100,300])},10000)}}
@@ -482,7 +483,7 @@ async function pinLogin(){const name=$('name').value.trim(),pin=$('pin').value.t
  try{await auth.signInWithEmailAndPassword(email,pass)}catch(e){
   try{const n=await db.collection('names').doc(name.toLowerCase()).get();if(n.exists)return toast('PIN errado (ou esse nome já é de outra pessoa)')}catch(_){}
   pendingName=name;try{await auth.createUserWithEmailAndPassword(email,pass)}catch(e2){pendingName=null;toast(e2.code==='auth/email-already-in-use'?'PIN errado':'Erro: '+e2.message)}}}
-const ACH={first:['👑','Primeira vitória','Ganhar um jogo a contar para o ranking'],streak3:['🔥','Imparável','3 vitórias seguidas no ranking'],
+const ACH={ghost:['👻','Fantasma','Ganhar um jogo a dizer sempre «Não faço», sem ganhar uma única vaza e sem perder vidas'],allin:['🎰','Tudo ou nada','Numa ronda de 5 cartas, dizer «Faço 5» e fazer as 5'],first:['👑','Primeira vitória','Ganhar um jogo a contar para o ranking'],streak3:['🔥','Imparável','3 vitórias seguidas no ranking'],
  clean:['🛡️','Intocável','Ganhar um jogo sem perder vidas'],seer:['🔮','Vidente','Acertar 5 apostas seguidas num jogo'],
  kami:['💥','Kamikaze','Apostar o máximo (3+ cartas) e falhar'],drunk:['🍺','Bêbado oficial','Perder 10 vidas no total'],
  zen:['🧘','Zen','Acertar 10 apostas de zero'],vet:['🎖️','Veterano','Jogar 50 jogos']};
@@ -513,7 +514,7 @@ async function profile(uid,back){app.innerHTML='<div class="lobby"><div class="s
    </div>
    <div class="h2">Evolução dos pontos</div>${chart(series)}
    <div class="h2">Conquistas (${[...have].filter(k=>ACH[k]).length}/${Object.keys(ACH).length})</div>
-   <div class="achs">${Object.entries(ACH).map(([k,a])=>`<div class="ach${have.has(k)?'':' off'}"><i>${a[0]}</i><div>${a[1]}<small>${a[2]}</small></div></div>`).join('')}</div>
+   <div class="achs">${Object.entries(ACH).map(([k,a])=>`<div class="ach${have.has(k)?'':' off'}${k==='ghost'?' leg':''}"><i>${a[0]}</i><div>${a[1]}<small>${a[2]}</small></div></div>`).join('')}</div>
    <button class="btn ghost" onclick="${back?`board('${back}')`:'home()'}">Voltar</button></div>`}
  catch(e){toast('Erro: '+e.message);home()}}
 function chart(v){if(v.length<2)return '<div class="hint">Joga um jogo a contar para o ranking para veres o gráfico.</div>';
@@ -537,7 +538,7 @@ async function finishGame(){if(S.done)return;S.done=true;const P=S.players,rated
     Object.assign(upd,{elo:e,games:FV.increment(1),wins:FV.increment(first?1:0),streak,best:Math.max(u.best||0,streak),wk:{id:wk,pts:(u.wk&&u.wk.id===wk?u.wk.pts:0)+d}})}
    const have=new Set(u.ach||[]),got=[];const chk=(k,c)=>{if(c&&!have.has(k)){have.add(k);got.push(k)}};
    chk('first',rated&&won);chk('streak3',rated&&streak>=3);chk('clean',won&&g.lost===0);chk('seer',g.best>=5);chk('kami',g.kami);
-   chk('drunk',nst.lost>=10);chk('zen',nst.zero>=10);chk('vet',nst.played>=50);
+   chk('drunk',nst.lost>=10);chk('zen',nst.zero>=10);chk('vet',nst.played>=50);chk('ghost',won&&g.lost===0&&!g.nz&&g.tw===0);chk('allin',g.allin);
    if(got.length){upd.ach=[...have];ach[i]=got}
    batch.update(db.collection('users').doc(p.uid),upd)});
   if(rated)batch.set(db.collection('games').doc(),{at:FV.serverTimestamp(),uids:P.map(p=>p.uid),players:P.map((p,i)=>({uid:p.uid,name:p.name,d:res[i].d,elo:res[i].e}))});
