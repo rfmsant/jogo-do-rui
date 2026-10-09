@@ -30,7 +30,7 @@
 html,body{margin:0;height:100%}
 body{font-family:'Bricolage Grotesque',system-ui,sans-serif;background:var(--bg);color:var(--ink);overflow:hidden}
 button{font:inherit;cursor:pointer;border:0}
-#app{height:100dvh;display:flex;flex-direction:column;max-width:900px;margin:0 auto;padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom)}
+#app{height:100dvh;overflow-y:auto;display:flex;flex-direction:column;max-width:900px;margin:0 auto;padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom)}
 
 /* Lobby */
 .lobby{margin:auto;width:100%;max-width:380px;display:flex;flex-direction:column;gap:14px;padding:16px 4px}
@@ -47,7 +47,7 @@ details{color:var(--muted);font-size:14px;line-height:1.5}summary{cursor:pointer
 .code{font-size:44px;font-weight:800;letter-spacing:.18em;text-align:center;color:var(--brass)}
 .plist{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
 .emobtn{position:fixed;left:14px;bottom:calc(168px + env(safe-area-inset-bottom));width:46px;height:46px;border-radius:50%;background:oklch(0 0 0/.55);border:1px solid oklch(1 0 0/.2);font-size:24px;z-index:6}
-.emopanel{position:fixed;left:14px;bottom:calc(222px + env(safe-area-inset-bottom));display:flex;gap:6px;padding:8px;border-radius:18px;background:oklch(0.22 0.02 30);box-shadow:0 8px 24px oklch(0 0 0/.5);z-index:6;animation:rise .25s var(--ease) both}
+.emopanel{position:fixed;left:14px;bottom:calc(222px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(4,48px);gap:6px;padding:8px;border-radius:18px;background:oklch(0.22 0.02 30);box-shadow:0 8px 24px oklch(0 0 0/.5);z-index:6;animation:rise .25s var(--ease) both}
 .emopanel button{width:48px;height:48px;border-radius:12px;background:oklch(1 0 0/.08);font-size:28px;transition:transform .15s var(--ease)}
 .emopanel button:active{transform:scale(.88)}
 .emo{position:fixed;z-index:12;font-size:42px;pointer-events:none;transform:translate(-50%,-50%);filter:drop-shadow(0 4px 8px oklch(0 0 0/.5));animation:emo 2.4s var(--ease) both}
@@ -77,6 +77,19 @@ details{color:var(--muted);font-size:14px;line-height:1.5}summary{cursor:pointer
 .hrow .who{margin-left:auto;font-size:13px;color:var(--muted)}
 .more{background:none;color:var(--brass);font-size:12px;text-decoration:underline;padding:2px 4px}
 .hint{font-size:13px;color:var(--muted);text-align:center;line-height:1.4}
+.achT{position:fixed;top:calc(12px + env(safe-area-inset-top));left:50%;transform:translate(-50%,-150%);z-index:25;display:flex;gap:12px;align-items:center;padding:10px 18px 10px 10px;border-radius:18px;background:oklch(0.22 0.02 30);border:1.5px solid var(--brass);box-shadow:0 12px 32px oklch(0 0 0/.55);min-width:260px;max-width:92vw;animation:achIn 4.8s var(--ease) both}
+.achT.leg{background:linear-gradient(135deg,oklch(0.32 0.06 85),oklch(0.22 0.02 30));box-shadow:0 0 40px oklch(0.84 0.12 85/.5)}
+.achT small{display:block;font-size:12px;color:var(--muted);font-weight:600}.achT b{font-size:18px;color:var(--brass)}
+.lk{position:relative;flex:none;width:48px;height:48px;display:grid;place-items:center;border-radius:14px;background:oklch(0.84 0.12 85/.15);color:var(--brass)}
+.lock{width:30px;height:30px;overflow:visible;animation:lkShake .45s .5s ease-in-out,lkOut .3s 1.35s ease-in forwards}
+.shk{transform-origin:17px 11px;animation:lkOpen .45s 1s var(--ease) forwards}
+.ae{position:absolute;font-size:30px;transform:scale(0);animation:aeIn .5s 1.5s var(--ease) forwards}
+@keyframes achIn{0%{transform:translate(-50%,-150%)}9%,90%{transform:translate(-50%,0);opacity:1}100%{transform:translate(-50%,-150%);opacity:0}}
+@keyframes lkShake{20%{transform:rotate(-12deg)}40%{transform:rotate(10deg)}60%{transform:rotate(-8deg)}80%{transform:rotate(5deg)}}
+@keyframes lkOpen{to{transform:translateY(-4px) rotate(40deg)}}
+@keyframes lkOut{to{transform:scale(0);opacity:0}}
+@keyframes aeIn{60%{transform:scale(1.35)}to{transform:scale(1)}}
+.back{align-self:flex-start;background:none;color:var(--ink);font-weight:700;font-size:16px;padding:6px 0}
 .hello{text-align:center;color:var(--muted);font-size:16px;margin:-4px 0 4px}.hello b{color:var(--ink)}
 .link{background:none;color:var(--muted);text-decoration:underline;font-size:14px;padding:4px}
 .gbtn{background:var(--card);color:var(--cardink)}
@@ -265,13 +278,14 @@ let onl='';
 setInterval(()=>{if(isHost&&S){Object.values(conns).forEach(c=>{try{c.open&&c.send({t:'ping'})}catch(_){}});
   const k=S.players.map(isOn).join();if(k!==onl){onl=k;sync()}}
  else if(conn&&clientCode){try{conn.open&&conn.send({t:'ping'})}catch(_){}if(LV&&Date.now()-lastHost>12000)lostHost()}},4000);
-async function leaveRoom(){if(!confirm(isHost?'Sair? A sala fecha para todos.':'Sair da sala?'))return;LS.set('jdr-room',null);
- if(isHost&&S){try{await db.collection('rooms').doc(S.code).delete()}catch(_){}}location.href=location.pathname}
+async function leaveRoom(){const over=LV&&LV.phase==='over';if(!over&&!confirm(isHost?'Sair? A sala fecha para todos.':'Sair da sala?'))return;LS.set('jdr-room',null);
+ if(isHost&&S){Object.values(conns).forEach(c=>{try{c.open&&c.send({t:'closed'})}catch(_){}});try{await db.collection('rooms').doc(S.code).delete()}catch(_){}}
+ setTimeout(()=>location.href=location.pathname,300)}
 function invite(){const url=location.origin+location.pathname+'?sala='+S.code,text='Bora jogar ao Jogo do Rui? 🃏🍺 Entra aqui: '+url;
  if(navigator.share)navigator.share({title:'Jogo do Rui',text}).catch(()=>{});else open('https://wa.me/?text='+encodeURIComponent(text),'_blank')}
 
 // ---------- Emojis ----------
-const EMO=['😂','😭','😡','😐'];let emoOpen=false,LV=null;
+const EMO=['😂','😭','😡','😐','😱','👏','😴'];let emoOpen=false,LV=null;
 function sendEmo(i,e){showEmo(i,e);Object.values(conns).forEach(c=>c.open&&c.send({t:'emo',p:i,e}))}
 function showEmo(i,e){const st=document.querySelector(`.seat[data-i="${i}"] .av`);if(!st)return;const r=st.getBoundingClientRect(),d=document.createElement('div');
  SFX.emo();d.className='emo';d.textContent=e;d.style.left=(r.left+r.width/2+(r.left>innerWidth/2?-44:44))+'px';d.style.top=(r.top+r.height/2)+'px';document.body.appendChild(d);setTimeout(()=>d.remove(),2400)}
@@ -310,7 +324,7 @@ function join(code){if(!ME)return home();code=(code||($('code')?$('code').value:
 function openConn(){if(!peer||peer.destroyed)return;if(!peer.open){try{peer.reconnect()}catch(_){}return}
  try{conn&&conn.close()}catch(_){}conn=peer.connect('jogodorui-'+clientCode,{reliable:true});const c=conn;
  c.on('open',()=>{c.send({t:'join',name:ME.name,uid:ME.uid});lastHost=Date.now()});
- c.on('data',m=>{lastHost=Date.now();showLost(false);if(m.t==='ping')return;if(m.t==='emo')return showEmo(m.p,m.e);if(m.t==='state')render(m.s);
+ c.on('data',m=>{lastHost=Date.now();showLost(false);if(m.t==='ping')return;if(m.t==='closed'){clientCode=null;LS.set('jdr-room',null);toast('O anfitrião fechou a sala');return setTimeout(()=>location.href=location.pathname,1500)}if(m.t==='emo')return showEmo(m.p,m.e);if(m.t==='state')render(m.s);
   else if(m.t==='err'){toast(m.m);if(!LV){LS.set('jdr-room',null);clientCode=null;try{peer.destroy()}catch(_){}peer=null;home()}}});
  c.on('close',()=>{if(c===conn)lostHost()})}
 function lostHost(){if(!clientCode)return;showLost(true);if(!retryT)retryT=setTimeout(()=>{retryT=null;openConn()},3000)}
@@ -362,9 +376,12 @@ function render(v){LV=v;
  h+=`<button class="emobtn" onclick="toggleEmo()" aria-label="Emojis">😀</button>`+(emoOpen?`<div class="emopanel" id="emop">${EMO.map(e=>`<button onclick="emo('${e}')">${e}</button>`).join('')}</div>`:'');
  if(end){h+=`<div class="veil"><div class="sheet"><h2>${v.phase==='over'?'🏆 '+esc(v.msg):'Resultados'}</h2>`+
   v.players.map((p,i)=>`<div class="res"><span>${esc(p.name)} <span style="color:var(--muted)">${p.bid===null?'':p.tricks+'/'+p.bid}</span></span>${v.phase==='over'&&v.elo&&v.elo[i]?`<span class="ed ${v.elo[i].d>=0?'up':'dn'}">${v.elo[i].d>=0?'+':''}${v.elo[i].d} → ${v.elo[i].e}</span>`:''}<span class="x ${p.lost?'bad':'good'}">${p.lost?(p.lives<=0?'Eliminado 🍺':'−1 vida 🍺'):(p.lives>0?'✓':'')}</span></div>`).join('')+
-  (isHost||v.phase==='over'?`<button class="btn" onclick="send({t:'next'})">${v.phase==='over'?'Jogar novamente':'Próxima ronda'}</button>`:'<p class="or">À espera do anfitrião…</p>')+'</div></div>'}
+  (isHost||v.phase==='over'?`<button class="btn" onclick="send({t:'next'})">${v.phase==='over'?'Jogar novamente':'Próxima ronda'}</button>`:'<p class="or">À espera do anfitrião…</p>')+(v.phase==='over'?`<button class="btn ghost" onclick="leaveRoom()">Sair para o início</button>`:'')+'</div></div>'}
  app.innerHTML=h;animate(v)}
 
+function achToast(a){const A=ACH[a];if(!A)return;const leg=a==='ghost',d=document.createElement('div');d.className='achT'+(leg?' leg':'');
+ d.innerHTML=`<div class="lk"><svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><path class="shk" d="M7 11V8a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><rect x="4.5" y="11" width="15" height="10" rx="2.5" fill="currentColor"/></svg><span class="ae">${A[0]}</span></div><div><small>${leg?'Conquista LENDÁRIA desbloqueada':'Conquista desbloqueada'}</small><b>${A[1]}</b></div>`;
+ document.body.appendChild(d);setTimeout(()=>{SFX.win(true);if(leg){SFX.fanfare();confetti()}navigator.vibrate&&navigator.vibrate(80)},1050);setTimeout(()=>d.remove(),4900)}
 function banner(t,me,cls){document.querySelectorAll('.banner').forEach(x=>x.remove());const b=document.createElement('div');b.className='banner'+(me?' me':'')+(cls?' '+cls:'');b.textContent=t;document.body.appendChild(b);setTimeout(()=>b.remove(),1700)}
 function confetti(){if(RM)return;const C=['oklch(0.84 0.12 85)','oklch(0.52 0.19 25)','oklch(0.98 0.005 90)','oklch(0.6 0.12 255)'];
  for(let i=0;i<90;i++){const d=document.createElement('div');d.className='cf';d.style.cssText=`left:${Math.random()*100}vw;background:${C[i%4]};animation-duration:${2+Math.random()*2}s;animation-delay:${Math.random()*.8}s`;document.body.appendChild(d);setTimeout(()=>d.remove(),5000)}}
@@ -388,7 +405,7 @@ function animate(v){
  const sk=v.hn+v.phase+v.trick.length;if(sk!==sndK){sndK=sk;const me=v.players[v.me];
   if(v.phase==='trickEnd')v.win==null?SFX.tie():SFX.win(v.win===v.me);
   if(v.phase==='handEnd'&&me.lost)SFX.lose();if(v.phase==='over')SFX.fanfare()}
- if(v.ach&&v.ach.length&&achShown!==v.hn+''){achShown=v.hn+'';v.ach.forEach((a,k)=>setTimeout(()=>{SFX.win(true);if(a==='ghost'){SFX.fanfare();confetti()}banner(ACH[a][0]+(a==='ghost'?' LENDÁRIA: ':' Conquista: ')+ACH[a][1],true)},2500+k*2000))}
+ if(v.ach&&v.ach.length&&achShown!==v.hn+''){achShown=v.hn+'';v.ach.forEach((a,k)=>setTimeout(()=>achToast(a),2500+k*5200))}
  if(tk!==lastTurn){lastTurn=tk;clearInterval(nudge);if(v.turn>=0){const me=v.turn===v.me,n=v.players[v.turn].name;
   if(me)SFX.turn();banner(me?(v.phase==='bid'?'Quantas fazes?':'É a tua vez!'):(v.phase==='bid'?n+' a falar':'Vez de '+n),me);if(me&&navigator.vibrate)navigator.vibrate(120);
   if(me)nudge=setInterval(()=>{banner('⏰ Anda lá, é a tua vez!',true);navigator.vibrate&&navigator.vibrate([300,100,300])},10000)}}
@@ -489,23 +506,27 @@ const ACH={ghost:['👻','Fantasma','Ganhar um jogo a dizer sempre «Não faço�
  zen:['🧘','Zen','Acertar 10 apostas de zero'],vet:['🎖️','Veterano','Jogar 50 jogos']};
 function wkId(d=new Date()){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())),day=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-day);
  const y=t.getUTCFullYear();return y+'-W'+Math.ceil(((t-Date.UTC(y,0,1))/864e5+1)/7)}
-async function board(tab='all'){app.innerHTML='<div class="lobby"><div class="spin"></div><div class="or">A carregar ranking…</div></div>';
+let navTab=null,navView='home';
+addEventListener('popstate',()=>{if(peer||LV)return;if(navView==='profile'&&navTab){history.pushState({v:'board'},'');board(navTab,true)}else{navView='home';home()}});
+function nav(v){if(navView==='home')history.pushState({v},'');navView=v}
+function goBack(){history.back()}
+async function board(tab='all',fromPop){if(!fromPop)nav('board');navView='board';navTab=tab;app.innerHTML='<div class="lobby"><div class="spin"></div><div class="or">A carregar ranking…</div></div>';
  try{const W=wkId();let rows;
   if(tab==='week'){const q=await db.collection('users').where('wk.id','==',W).limit(300).get();rows=q.docs.map(d=>({id:d.id,u:d.data(),v:d.data().wk.pts})).sort((a,b)=>b.v-a.v).slice(0,50)}
   else{const q=await db.collection('users').orderBy('elo','desc').limit(50).get();rows=q.docs.map(d=>({id:d.id,u:d.data(),v:d.data().elo}))}
-  app.innerHTML=`<div class="lobby" style="max-width:460px"><h1 class="title" style="font-size:2.4rem">Ranking</h1>
+  app.innerHTML=`<div class="lobby" style="max-width:460px"><button class="back" onclick="goBack()">← Voltar</button><h1 class="title" style="font-size:2.4rem">Ranking</h1>
    <div class="tabs"><button class="${tab==='all'?'on':''}" onclick="board('all')">Geral</button><button class="${tab==='week'?'on':''}" onclick="board('week')">Esta semana</button></div>
    <table class="lb">${rows.map((r,i)=>`<tr class="${ME&&r.id===ME.uid?'me':''}" onclick="profile('${r.id}','${tab}')"><td>${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td><td>${esc(r.u.name)}<div class="sub">${tab==='week'?'pontos ganhos esta semana':`${r.u.games} jogos · ${r.u.wins} vitórias`}</div></td><td>${tab==='week'&&r.v>0?'+':''}${r.v}</td></tr>`).join('')||`<tr><td></td><td>${tab==='week'?'Ainda ninguém jogou esta semana':'Ainda ninguém jogou'}</td><td></td></tr>`}</table>
    ${tab==='week'?'<div class="hint">Recomeça todas as segundas-feiras</div>':''}
-   <button class="btn ghost" onclick="home()">Voltar</button></div>`}
+   <button class="btn ghost" onclick="goBack()">Voltar</button></div>`}
  catch(e){toast('Erro: '+e.message);home()}}
-async function profile(uid,back){app.innerHTML='<div class="lobby"><div class="spin"></div><div class="or">A carregar perfil…</div></div>';
+async function profile(uid,back){if(navView==='home')nav('profile');navView='profile';navTab=back||null;app.innerHTML='<div class="lobby"><div class="spin"></div><div class="or">A carregar perfil…</div></div>';
  try{const [d,g]=await Promise.all([db.collection('users').doc(uid).get(),db.collection('games').where('uids','array-contains',uid).limit(200).get()]);
   const u=d.data(),st=u.st||{},bh=st.bh||[],have=new Set(u.ach||[]);
   const games=g.docs.map(x=>x.data()).sort((a,b)=>((a.at&&a.at.seconds)||9e9)-((b.at&&b.at.seconds)||9e9));
   const series=[100,...games.map(x=>(x.players.find(p=>p.uid===uid)||{}).elo).filter(x=>x!=null)];
   const fav=bh.length&&Math.max(...bh)>0?bh.indexOf(Math.max(...bh)):null,pct=(a,b)=>b?Math.round(a/b*100)+'%':'–';
-  app.innerHTML=`<div class="lobby" style="max-width:460px"><h1 class="title" style="font-size:2.4rem">${esc(u.name)}</h1>
+  app.innerHTML=`<div class="lobby" style="max-width:460px"><button class="back" onclick="${back?`board('${back}',true)`:'goBack()'}">← Voltar</button><h1 class="title" style="font-size:2.4rem">${esc(u.name)}</h1>
    <div class="stats">
     <div class="st"><b>${u.elo}</b><span>pontos</span></div><div class="st"><b>${u.wins}/${u.games}</b><span>vitórias (${pct(u.wins,u.games)})</span></div>
     <div class="st"><b>${pct(st.hits||0,st.bids||0)}</b><span>apostas certas (${st.hits||0}/${st.bids||0})</span></div>
@@ -515,7 +536,7 @@ async function profile(uid,back){app.innerHTML='<div class="lobby"><div class="s
    <div class="h2">Evolução dos pontos</div>${chart(series)}
    <div class="h2">Conquistas (${[...have].filter(k=>ACH[k]).length}/${Object.keys(ACH).length})</div>
    <div class="achs">${Object.entries(ACH).map(([k,a])=>`<div class="ach${have.has(k)?'':' off'}${k==='ghost'?' leg':''}"><i>${a[0]}</i><div>${a[1]}<small>${a[2]}</small></div></div>`).join('')}</div>
-   <button class="btn ghost" onclick="${back?`board('${back}')`:'home()'}">Voltar</button></div>`}
+   <button class="btn ghost" onclick="${back?`board('${back}',true)`:'goBack()'}">Voltar</button></div>`}
  catch(e){toast('Erro: '+e.message);home()}}
 function chart(v){if(v.length<2)return '<div class="hint">Joga um jogo a contar para o ranking para veres o gráfico.</div>';
  const W=320,H=120,P=14,mn=Math.min(...v),mx=Math.max(...v),rg=Math.max(1,mx-mn),x=i=>P+i*(W-2*P)/(v.length-1),y=e=>H-P-(e-mn)*(H-2*P)/rg;
